@@ -36,7 +36,7 @@ public class MainController {
 	}
 	
 	//POST rest end point to consume the file details and store them in the database.
-	@PostMapping(value = "/regression360/backend/filedetails", consumes = "application/json")
+	@PostMapping(value = "/regression360/backend/filedetails", consumes = "application/json", produces = "application/json")
 	public String postWebhook(@RequestBody String payload) {
 		int user_local_commit_id = mainService.saveFileDetails(payload);
 		ObjectMapper mapper = new ObjectMapper();

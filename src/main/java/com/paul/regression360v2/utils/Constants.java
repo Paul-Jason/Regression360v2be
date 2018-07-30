@@ -9,6 +9,7 @@ public class Constants {
 	public final static String TEMP_DIR = System.getProperty("java.io.tmpdir");
 	
 	public final static String TEMP_DIR_1 = "C:/Users/I329046/Documents/My Drive";
-
-
+	
+	public final static String JIRA_BASE_URL = "https://sapjira.wdf.sap.corp:443/rest/api/2/issue";
+	
 }
