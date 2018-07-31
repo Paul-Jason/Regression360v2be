@@ -38,11 +38,14 @@ public class MainController {
 	//POST rest end point to consume the file details and store them in the database.
 	@PostMapping(value = "/regression360/backend/filedetails", consumes = "application/json", produces = "application/json")
 	public String postWebhook(@RequestBody String payload) {
+		//we store this session details in the DB
 		int user_local_commit_id = mainService.saveFileDetails(payload);
 		ObjectMapper mapper = new ObjectMapper();
 		ObjectNode objectNode = mapper.createObjectNode();
 		objectNode.put("userLocalCommitId", user_local_commit_id);
+		//Repo related activities 
 		boolean status = gitService.cloneOrFetchRepo();
+		//Getting the commit history details from here
 		MainTO mainTO = gitService.getFileCommitHistory();
 		mainTO.setUserLocalCommitId(user_local_commit_id);
 		try {

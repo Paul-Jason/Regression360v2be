@@ -4,10 +4,13 @@ import java.io.File;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import org.eclipse.jgit.api.Git;
@@ -18,8 +21,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.paul.regression360v2.TransferObject.CommitTO;
 import com.paul.regression360v2.TransferObject.FileDetailsTO;
@@ -88,18 +93,23 @@ public class GitService {
 	}
 	
 	public MainTO getFileCommitHistory() {
-		String start;
+		//This sesssions details are store in DB.
 		ArrayList<FileDetails> fileDetails = fileDetailsRepository.findByUserInfo(mainService.userInfoDB);;
 		System.out.println(fileDetails);
+		//Main POJO of the Final JSON Response
 		MainTO mainTO = new MainTO();
 		List<FileDetailsTO> allFileDetails = new LinkedList<FileDetailsTO>();
+		//Iterating through each file present in the session
 		for(FileDetails fileDetail : fileDetails){
 			FileDetailsTO fileDetailsTO = new FileDetailsTO();
 			fileDetailsTO.setFileId(fileDetail.getFileId());
 			fileDetailsTO.setFileName(fileDetail.getFileName());
+			//Getting the commit history of this file
 			try {
 				Iterable<RevCommit> log = git.log().addPath(fileDetail.getFileName()).call();
 				List<CommitTO> commitHistory = new LinkedList<CommitTO>();
+				HashMap<String, CommitTO> jiraIdCommit = new HashMap<String , CommitTO>();
+				//Getting commit details for each commit and storing in the POJO not the DB
 				for(RevCommit commit: log) {
 					CommitTO commitTO = new CommitTO();
 					System.out.println("Iterating through every commit!!");
@@ -109,14 +119,12 @@ public class GitService {
 					commitTO.setFullMessage(commit.getFullMessage());
 					commitTO.setCommitAuthor(commit.getCommitterIdent());
 					
-					/* Code for Jira API's*/
 					String commitMessage = commit.getFullMessage();
+					//Check for whether the commit message contains the jira id
 					if(Pattern.compile(Pattern.quote("jira"), Pattern.CASE_INSENSITIVE).matcher(commitMessage).find()) {
 						String[] fullMessage = commitMessage.split("(?i)jira:");
 						if(fullMessage.length >1) {
-							System.out.println("fullMessage : " + fullMessage[1]);
 							String jiraInfo = fullMessage[1];
-							System.out.println("jira info : " + jiraInfo);
 							StringBuffer jiraId = new StringBuffer() ;
 							for(int i = 0; i < jiraInfo.length(); i++) {
 								if(jiraInfo.charAt(i) == ' ') {
@@ -129,48 +137,69 @@ public class GitService {
 							}
 							String jiraIdString = jiraId.toString();
 							System.out.println("jira id : " + jiraIdString);
-							//Talking to Jira system.
-							OkHttpClient client = new OkHttpClient();
-							String url = Constants.JIRA_BASE_URL + "/" + jiraId;
-							System.setProperty("javax.net.ssl.trustStore","C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
-					        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
-							Request request = new Request.Builder()
-									  .url(url)
-									  .get()
-									  .addHeader("authorization", "Basic aTMyOTA0NjpBQmRldmlsaWVyczM=")
-									  .addHeader("cache-control", "no-cache")
-									  .build();
-							
-					        System.setProperty("javax.net.ssl.trustStrore", "C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
-					        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
-
-					        String trustStore = System.getProperty("javax.net.ssl.trustStore");
-					        if (trustStore == null) {
-					            System.out.println("javax.net.ssl.trustStore is not defined");
-					        } else {
-					            System.out.println("javax.net.ssl.trustStore = " + trustStore);
-					        }
-							try {
-								Response response = client.newCall(request).execute();
-								if(response.isSuccessful()) {
-									String responseJsonString = response.body().string();
-									ObjectMapper mapper = new ObjectMapper();
-									JsonNode rootNode = mapper.readValue(responseJsonString, JsonNode.class);
-									commitTO.setJiraId(jiraIdString);
-									JsonNode fields = rootNode.get("fields");
-									commitTO.setShortMessage(fields.get("summary").asText());
-									commitTO.setJiraDescription(fields.get("description").asText());
-									commitTO.setJiraTicketType(fields.get("issuetype").get("name").asText());
-									commitTO.setJiraCreationTime(fields.get("created").asText());
-								}
-							} catch (IOException e) {
-								
-							}
-							//Talking to Jira system.
+							jiraIdCommit.put(jiraIdString, commitTO);
 						}
 					}
-					/* Code for Jira API's*/
-					commitHistory.add(commitTO);
+				}
+				/*Talking to JIRA for multiple issues of a single file*/
+				List<String> jiraIds = new ArrayList<String>(jiraIdCommit.keySet());
+				StringBuilder multipleJiraIdsQuery = new StringBuilder();
+				for(int i = 0; i < jiraIds.size() ; i++) {
+					if(i == jiraIds.size() -1)
+						multipleJiraIdsQuery.append(jiraIds.get(i));
+					else
+						multipleJiraIdsQuery.append(jiraIds.get(i) + ",");
+				}
+				//Building url to call the JIRA system for the details of multiple issues reelated to a single file at one shot.
+				OkHttpClient client = new OkHttpClient();
+				String url = Constants.JIRA_BASE_URL_MULTPLE_ISSUSES + " " + "(" + multipleJiraIdsQuery + ")";
+				System.out.println("jira url : " + url);
+				System.setProperty("javax.net.ssl.trustStore","C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
+		        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
+				Request request = new Request.Builder()
+						  .url(url)
+						  .get()
+						  .addHeader("authorization", "Basic aTMyOTA0NjpBQmRldmlsaWVyczM=")
+						  .addHeader("cache-control", "no-cache")
+						  .build();
+				
+		        System.setProperty("javax.net.ssl.trustStrore", "C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
+		        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
+		        //Providing https certificate details to talk to SAP Jira system
+		        String trustStore = System.getProperty("javax.net.ssl.trustStore");
+		        if (trustStore == null) {
+		            System.out.println("javax.net.ssl.trustStore is not defined");
+		        } else {
+		            System.out.println("javax.net.ssl.trustStore = " + trustStore);
+		        }
+				try {
+					Response response = client.newCall(request).execute();
+					if(response.isSuccessful()) {
+						String responseJsonString = response.body().string();
+						//String responseJsonString = Constants.JIRA_MULTIPLE_ISSUES_SAMPLE_JSON;  //use to have sample jira response instead of calling the jira system
+						System.out.println("Jira Response : " + responseJsonString);
+						ObjectMapper mapper = new ObjectMapper();
+						@SuppressWarnings("deprecation")
+						ObjectReader readerForList = mapper.reader(new TypeReference<List<Object>>() {});
+						JsonNode rootNode = mapper.readValue(responseJsonString, JsonNode.class);
+						JsonNode issues = rootNode.get("issues");
+						List<Object> issuesList = readerForList.readValue(issues);
+						//Populating jira related details in the CommitTO POJO.
+						for(Object issue : issuesList) {
+							JsonNode issueNode = mapper.convertValue(issue, JsonNode.class);
+							String issueKey = issueNode.get("key").asText();
+							CommitTO commitTO = jiraIdCommit.get(issueKey);
+							commitTO.setJiraId(issueKey);
+							JsonNode fields = issueNode.get("fields");
+							commitTO.setJiraSummary(fields.get("summary").asText());
+							commitTO.setJiraDescription(fields.get("description").asText());
+							commitTO.setJiraTicketType(fields.get("issuetype").get("description").asText());
+							commitTO.setJiraCreationTime(fields.get("created").asText());
+							commitHistory.add(commitTO);
+						}
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
 				}
 				fileDetailsTO.setCommitHistory(commitHistory);
 			} catch (GitAPIException e) {
@@ -181,5 +210,4 @@ public class GitService {
 		mainTO.setFileDetails(allFileDetails);
 		return mainTO;
 	}
-
 }

@@ -11,6 +11,7 @@ public class CommitTO {
 	private String fullMessage;
 	private String jiraId;
 	private String jiraTicketType;
+	private String jiraSummary;
 	private String jiraDescription;
 	private String jiraCreationTime;
 	
@@ -18,7 +19,7 @@ public class CommitTO {
 		
 	}
 	
-	public CommitTO(String commitId, PersonIdent commitAuthor, int commitTime, String shortMessage, String fullMessage, String jiraId, String jiraTicketType, String jiraDescription, String jiraCreationTime) {
+	public CommitTO(String commitId, PersonIdent commitAuthor, int commitTime, String shortMessage, String fullMessage, String jiraId, String jiraTicketType, String jiraSummary, String jiraDescription, String jiraCreationTime) {
 		this.commitId = commitId;
 		this.commitAuthor = commitAuthor;
 		this.commitTime = commitTime;
@@ -26,6 +27,7 @@ public class CommitTO {
 		this.fullMessage = fullMessage;
 		this.jiraId = jiraId;
 		this.jiraTicketType = jiraTicketType;
+		this.jiraSummary = jiraSummary;
 		this.jiraDescription = jiraDescription;
 		this.jiraCreationTime = jiraCreationTime;
 	}
@@ -100,6 +102,14 @@ public class CommitTO {
 
 	public void setJiraCreationTime(String jiraCreationTime) {
 		this.jiraCreationTime = jiraCreationTime;
+	}
+
+	public String getJiraSummary() {
+		return jiraSummary;
+	}
+
+	public void setJiraSummary(String jiraSummary) {
+		this.jiraSummary = jiraSummary;
 	}
 
 }
