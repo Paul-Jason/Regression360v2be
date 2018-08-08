@@ -7,5 +7,7 @@ import com.paul.regression360v2.entity.UserInfo;
 
 @Repository
 public interface UserInfoRepository extends JpaRepository<UserInfo, Integer> {
+	
+	UserInfo findByUserLocalCommitInfoId(int userLocalCommitInfoId);
 
 }

@@ -4,12 +4,9 @@ import java.io.File;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -19,13 +16,10 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.paul.regression360v2.TransferObject.CommitTO;
 import com.paul.regression360v2.TransferObject.FileDetailsTO;
 import com.paul.regression360v2.TransferObject.MainTO;
@@ -38,14 +32,7 @@ import com.paul.regression360v2.utils.Constants;
 import com.squareup.okhttp.OkHttpClient;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.Response;
-import com.squareup.okhttp.ResponseBody;
 import com.paul.regression360v2.service.MainService;
-
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.URI;
-import org.apache.commons.httpclient.URIException;
-import org.apache.commons.httpclient.methods.GetMethod;
 
 
 @Service
@@ -92,9 +79,9 @@ public class GitService {
 		return false;
 	}
 	
-	public MainTO getFileCommitHistory() {
+	public MainTO getFileCommitHistory(UserInfo userInfoDB) {
 		//This sesssions details are store in DB.
-		ArrayList<FileDetails> fileDetails = fileDetailsRepository.findByUserInfo(mainService.userInfoDB);;
+		ArrayList<FileDetails> fileDetails = fileDetailsRepository.findByUserInfo(userInfoDB);
 		System.out.println(fileDetails);
 		//Main POJO of the Final JSON Response
 		MainTO mainTO = new MainTO();
@@ -106,7 +93,7 @@ public class GitService {
 			fileDetailsTO.setFileName(fileDetail.getFileName());
 			//Getting the commit history of this file
 			try {
-				Iterable<RevCommit> log = git.log().addPath(fileDetail.getFileName()).call();
+				Iterable<RevCommit> log = git.log().addPath(fileDetail.getFileName()).setMaxCount(5).call();
 				List<CommitTO> commitHistory = new LinkedList<CommitTO>();
 				HashMap<String, CommitTO> jiraIdCommit = new HashMap<String , CommitTO>();
 				//Getting commit details for each commit and storing in the POJO not the DB
@@ -120,24 +107,25 @@ public class GitService {
 					commitTO.setCommitAuthor(commit.getCommitterIdent());
 					
 					String commitMessage = commit.getFullMessage();
-					//Check for whether the commit message contains the jira id
-					if(Pattern.compile(Pattern.quote("jira"), Pattern.CASE_INSENSITIVE).matcher(commitMessage).find()) {
+					//Check for whether the commit message contains the jira id and a lot of validations
+					if(Pattern.compile(Pattern.quote("jira:"), Pattern.CASE_INSENSITIVE).matcher(commitMessage).find()) {
 						String[] fullMessage = commitMessage.split("(?i)jira:");
 						if(fullMessage.length >1) {
 							String jiraInfo = fullMessage[1];
 							StringBuffer jiraId = new StringBuffer() ;
 							for(int i = 0; i < jiraInfo.length(); i++) {
-								if(jiraInfo.charAt(i) == ' ') {
-									continue;
+								if(Character.isDigit(jiraInfo.charAt(i)) || Character.isLetter(jiraInfo.charAt(i)) || jiraInfo.charAt(i) == '-') { 
+									jiraId.append(jiraInfo.charAt(i));
 								}
 								else if(jiraInfo.charAt(i) == '\n') {
 									break;
 								}
-								jiraId.append(jiraInfo.charAt(i));
 							}
 							String jiraIdString = jiraId.toString();
 							System.out.println("jira id : " + jiraIdString);
-							jiraIdCommit.put(jiraIdString, commitTO);
+							if(Pattern.compile(Pattern.quote("fpa"), Pattern.CASE_INSENSITIVE).matcher(jiraIdString).find()) {
+								jiraIdCommit.put(jiraIdString, commitTO);
+							}	
 						}
 					}
 				}
@@ -152,6 +140,9 @@ public class GitService {
 				}
 				//Building url to call the JIRA system for the details of multiple issues reelated to a single file at one shot.
 				OkHttpClient client = new OkHttpClient();
+				client.setConnectTimeout(30, TimeUnit.SECONDS);
+				client.setReadTimeout(30, TimeUnit.SECONDS);
+				client.setWriteTimeout(30, TimeUnit.SECONDS);
 				String url = Constants.JIRA_BASE_URL_MULTPLE_ISSUSES + " " + "(" + multipleJiraIdsQuery + ")";
 				System.out.println("jira url : " + url);
 				System.setProperty("javax.net.ssl.trustStore","C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
@@ -176,8 +167,7 @@ public class GitService {
 					Response response = client.newCall(request).execute();
 					if(response.isSuccessful()) {
 						String responseJsonString = response.body().string();
-						//String responseJsonString = Constants.JIRA_MULTIPLE_ISSUES_SAMPLE_JSON;  //use to have sample jira response instead of calling the jira system
-						System.out.println("Jira Response : " + responseJsonString);
+//						String responseJsonString = Constants.JIRA_MULTIPLE_ISSUES_SAMPLE_JSON;  //use to have sample jira response instead of calling the jira system
 						ObjectMapper mapper = new ObjectMapper();
 						@SuppressWarnings("deprecation")
 						ObjectReader readerForList = mapper.reader(new TypeReference<List<Object>>() {});

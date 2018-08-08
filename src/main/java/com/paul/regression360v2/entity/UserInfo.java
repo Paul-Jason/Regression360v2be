@@ -26,17 +26,20 @@ public class UserInfo {
 	@Column(name="user_name", nullable= false)
 	private String userName;
 	
-	@OneToOne(cascade = CascadeType.ALL,mappedBy = "userInfo")
-	@JsonIgnore
-	private  FileDetails fileDetails;
+	@Column(name="jira_issue_id", nullable= false)
+	private String jiraIssueId;
+	
+	@OneToMany(cascade = CascadeType.ALL,mappedBy = "userInfo")
+	private  List<FileDetails> fileDetails;
 	
 	public UserInfo() {
 			
 	}
 	
-	public UserInfo(String userName, FileDetails fileDetails) {
+	public UserInfo(String userName, List<FileDetails> fileDetails, String jiraIssueId) {
 		this.userName = userName;
 		this.fileDetails = fileDetails;
+		this.jiraIssueId = jiraIssueId;
 	}
 
 	public String getUserName() {
@@ -47,11 +50,11 @@ public class UserInfo {
 		this.userName = userName;
 	}
 
-	public FileDetails getFileDetails() {
+	public List<FileDetails> getFileDetails() {
 		return fileDetails;
 	}
 
-	public void setFileDetails(FileDetails fileDetails) {
+	public void setFileDetails(List<FileDetails> fileDetails) {
 		this.fileDetails = fileDetails;
 	}
 
@@ -59,4 +62,12 @@ public class UserInfo {
 		return userLocalCommitInfoId;
 	}
 
+	public String getJiraIssueId() {
+		return jiraIssueId;
+	}
+
+	public void setJiraIssueId(String jiraIssueId) {
+		this.jiraIssueId = jiraIssueId;
+	}
+	
 }
