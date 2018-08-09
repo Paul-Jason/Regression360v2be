@@ -3,12 +3,23 @@ package com.paul.regression360v2.service;
 import java.io.File;
 
 import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.TransportConfigCallback;
@@ -65,16 +76,18 @@ public class GitService {
 			}
 		}
 		else {
-			try {
-				Git result = Git.cloneRepository()
-				.setURI(Constants.REMOTE_URL + "/" + Constants.REPO_NAME)
-				.setDirectory(new File(Constants.TEMP_DIR + "/" + Constants.REPO_NAME))
-				.call();
-				System.out.println("Having repository: " + result.getRepository().getDirectory());
-				return true;
-			} catch (GitAPIException e) {
-				e.printStackTrace();
-			}
+			System.out.println("Repoistory deosnt exist at : " + workingDir + "so exiting the program");
+			System.exit(1);
+//			try {
+//				Git result = Git.cloneRepository()
+//				.setURI(Constants.REMOTE_URL + "/" + Constants.REPO_NAME)
+//				.setDirectory(new File(Constants.TEMP_DIR + "/" + Constants.REPO_NAME))
+//				.call();
+//				System.out.println("Having repository: " + result.getRepository().getDirectory());
+//				return true;
+//			} catch (GitAPIException e) {
+//				e.printStackTrace();
+//			}
         }
 		return false;
 	}
@@ -145,8 +158,52 @@ public class GitService {
 				client.setWriteTimeout(30, TimeUnit.SECONDS);
 				String url = Constants.JIRA_BASE_URL_MULTPLE_ISSUSES + " " + "(" + multipleJiraIdsQuery + ")";
 				System.out.println("jira url : " + url);
-				System.setProperty("javax.net.ssl.trustStore","C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
-		        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
+				
+				/*Disabling SSL certificate verification*/
+				
+				// Create a trust manager that does not validate certificate chains
+		        TrustManager[] trustAllCerts = new TrustManager[] {new X509TrustManager() {
+		                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+		                    return null;
+		                }
+		                @Override
+		                public void checkClientTrusted(X509Certificate[] certs, String authType) {
+		                }
+		                @Override
+		                public void checkServerTrusted(X509Certificate[] certs, String authType) {
+		                }
+		            }
+		        };
+		 
+		        // Install the all-trusting trust manager
+		        SSLContext sc = null;
+				try {
+					sc = SSLContext.getInstance("SSL");
+				} catch (NoSuchAlgorithmException e1) {
+					// TODO Auto-generated catch block
+				}
+		        try {
+					sc.init(null, trustAllCerts, new java.security.SecureRandom());
+				} catch (KeyManagementException e1) {
+					e1.printStackTrace();
+				}
+		        HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+		 
+		        // Create all-trusting host name verifier
+		        HostnameVerifier allHostsValid = new HostnameVerifier() {
+		        	@Override
+		            public boolean verify(String hostname, SSLSession session) {
+		                return true;
+		            }
+		        };
+		        
+		        /*Disabling SSL certificate verification*/
+		        
+		        // Install the all-trusting host verifier
+		        HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
+				/*Disabling SSL certificate verification*/
+//				System.setProperty("javax.net.ssl.trustStore","C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
+//		        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
 				Request request = new Request.Builder()
 						  .url(url)
 						  .get()
@@ -154,15 +211,15 @@ public class GitService {
 						  .addHeader("cache-control", "no-cache")
 						  .build();
 				
-		        System.setProperty("javax.net.ssl.trustStrore", "C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
-		        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
+//		        System.setProperty("javax.net.ssl.trustStrore", "C:/Program Files/Java/jdk1.8.0_102/jre/lib/security/cacerts.file");
+//		        System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
 		        //Providing https certificate details to talk to SAP Jira system
-		        String trustStore = System.getProperty("javax.net.ssl.trustStore");
-		        if (trustStore == null) {
-		            System.out.println("javax.net.ssl.trustStore is not defined");
-		        } else {
-		            System.out.println("javax.net.ssl.trustStore = " + trustStore);
-		        }
+//		        String trustStore = System.getProperty("javax.net.ssl.trustStore");
+//		        if (trustStore == null) {
+//		            System.out.println("javax.net.ssl.trustStore is not defined");
+//		        } else {
+//		            System.out.println("javax.net.ssl.trustStore = " + trustStore);
+//		        }
 				try {
 					Response response = client.newCall(request).execute();
 					if(response.isSuccessful()) {
